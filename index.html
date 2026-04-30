@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LFMC Database Updater</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --white:#ffffff; --off:#f5f5f3; --rule:#e0e0dc; --mid:#999990;
+  --dark:#1a1a18; --ink:#2e2e2c; --green:#2d6a4f; --green-light:#e8f4ee;
+  --red:#c0392b; --amber:#b7860b;
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+}
+html,body{height:100%;background:var(--off);color:var(--ink);font-family:var(--sans);font-size:14px;}
+.page{min-height:100vh;max-width:680px;margin:0 auto;padding:64px 32px 80px;}
+.wordmark{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--mid);margin-bottom:32px;}
+h1{font-family:var(--sans);font-weight:300;font-size:28px;line-height:1.25;color:var(--dark);margin-bottom:8px;letter-spacing:-.02em;}
+.lead{font-size:13px;color:var(--mid);line-height:1.6;margin-bottom:48px;}
+hr{border:none;border-top:1px solid var(--rule);margin:32px 0;}
+.label{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--mid);margin-bottom:10px;}
+.drop{background:var(--white);border:1px solid var(--rule);border-radius:4px;padding:20px;cursor:pointer;transition:border-color .15s;display:flex;align-items:center;gap:16px;margin-bottom:8px;}
+.drop:hover{border-color:var(--dark);} .drop.drag-over{border-color:var(--green);background:var(--green-light);} .drop.loaded{border-color:var(--green);}
+.drop-icon{width:36px;height:36px;border-radius:3px;background:var(--off);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;}
+.drop.loaded .drop-icon{background:var(--green-light);}
+.drop-text{flex:1;min-width:0;}
+.drop-name{font-weight:500;font-size:13px;color:var(--dark);margin-bottom:2px;}
+.drop-sub{font-size:12px;color:var(--mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.drop-sub.ok{color:var(--green);} .drop-sub.err{color:var(--red);}
+.pick-btn{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;padding:6px 12px;border:1px solid var(--rule);border-radius:3px;background:var(--off);color:var(--ink);cursor:pointer;flex-shrink:0;transition:border-color .15s;}
+.pick-btn:hover{border-color:var(--dark);}
+input[type=file]{display:none;}
+.drop-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;}
+.dup-row{display:flex;align-items:center;gap:8px;margin-bottom:32px;}
+.dup-label{font-size:12px;color:var(--mid);margin-right:4px;}
+.seg-btn{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;padding:5px 12px;border:1px solid var(--rule);border-radius:3px;background:var(--white);color:var(--mid);cursor:pointer;transition:all .12s;}
+.seg-btn.active{background:var(--dark);border-color:var(--dark);color:var(--white);}
+.run-btn{width:100%;padding:14px;font-family:var(--sans);font-size:13px;font-weight:500;background:var(--dark);color:var(--white);border:none;border-radius:4px;cursor:pointer;transition:opacity .15s;margin-bottom:32px;}
+.run-btn:disabled{opacity:.25;cursor:not-allowed;} .run-btn:not(:disabled):hover{opacity:.85;}
+.log-wrap{background:var(--white);border:1px solid var(--rule);border-radius:4px;overflow:hidden;margin-bottom:24px;}
+.log-top{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--rule);}
+.log-indicator{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--mid);}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--rule);}
+.dot.live{background:var(--green);animation:blink 1s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.log-count{font-family:var(--mono);font-size:10px;color:var(--mid);}
+.log-body{padding:12px 14px;max-height:260px;overflow-y:auto;font-family:var(--mono);font-size:11.5px;line-height:1.8;}
+.log-body::-webkit-scrollbar{width:3px;} .log-body::-webkit-scrollbar-thumb{background:var(--rule);}
+.log-line{display:flex;gap:12px;}
+.log-t{color:var(--mid);flex-shrink:0;}
+.log-m{color:var(--ink);}
+.log-m.success{color:var(--green);} .log-m.warn{color:var(--amber);} .log-m.error{color:var(--red);} .log-m.section{color:var(--dark);font-weight:500;}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:4px;overflow:hidden;margin-bottom:16px;}
+.stat{background:var(--white);padding:16px 14px;text-align:center;}
+.stat-n{font-family:var(--mono);font-size:22px;font-weight:500;color:var(--dark);display:block;margin-bottom:4px;}
+.stat-l{font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--mid);}
+.dl-btn{width:100%;padding:13px;font-family:var(--sans);font-size:13px;background:var(--white);color:var(--dark);border:1px solid var(--dark);border-radius:4px;cursor:pointer;transition:background .12s;display:none;}
+.dl-btn:hover{background:var(--off);}
+.hidden{display:none!important;}
+@media(max-width:500px){.drop-row{grid-template-columns:1fr;}.stats{grid-template-columns:repeat(2,1fr);}.page{padding:40px 20px 60px;}}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="wordmark">NRT Fire Research · Survey123 Integration</div>
+  <h1>LFMC Master<br>Database Updater</h1>
+  <p class="lead">Upload the monthly Survey123 exports to append new records into the master database. Styles and formatting are preserved.</p>
+
+  <div class="label">Master database</div>
+  <div class="drop" id="masterDropZone" onclick="document.getElementById('masterFile').click()">
+    <div class="drop-icon">🗄</div>
+    <div class="drop-text">
+      <div class="drop-name">LFMC_MasterDatabase</div>
+      <div class="drop-sub" id="masterSub">Drop file or click to browse</div>
+    </div>
+    <label class="pick-btn" onclick="event.stopPropagation();document.getElementById('masterFile').click()">Browse</label>
+    <input type="file" id="masterFile" accept=".xlsx,.xls">
+  </div>
+  <hr>
+
+  <div class="label">Survey123 exports</div>
+  <div class="drop-row">
+    <div class="drop" id="plotDropZone" onclick="document.getElementById('plotFile').click()">
+      <div class="drop-icon">📋</div>
+      <div class="drop-text">
+        <div class="drop-name">Plot Data</div>
+        <div class="drop-sub" id="plotSub">LFMC_Plot_Data_*.xlsx</div>
+      </div>
+      <input type="file" id="plotFile" accept=".xlsx,.xls">
+    </div>
+    <div class="drop" id="fieldDropZone" onclick="document.getElementById('fieldFile').click()">
+      <div class="drop-icon">🌿</div>
+      <div class="drop-text">
+        <div class="drop-name">Field Survey</div>
+        <div class="drop-sub" id="fieldSub">LFMC_Field_Survey_*.xlsx</div>
+      </div>
+      <input type="file" id="fieldFile" accept=".xlsx,.xls">
+    </div>
+  </div>
+  <hr>
+
+  <div class="dup-row">
+    <span class="dup-label">Duplicates</span>
+    <button class="seg-btn active" id="opt-skip"      onclick="setDupMode('skip')">Skip</button>
+    <button class="seg-btn"        id="opt-overwrite"  onclick="setDupMode('overwrite')">Overwrite</button>
+    <button class="seg-btn"        id="opt-append"     onclick="setDupMode('append')">Append</button>
+  </div>
+
+  <button class="run-btn" id="runBtn" onclick="runUpdate()" disabled>Run update</button>
+
+  <div class="log-wrap">
+    <div class="log-top">
+      <div class="log-indicator"><span class="dot" id="logDot"></span>Log</div>
+      <span class="log-count" id="logCount">—</span>
+    </div>
+    <div class="log-body" id="logBody">
+      <div class="log-line"><span class="log-t">--:--:--</span><span class="log-m">Waiting for files…</span></div>
+    </div>
+  </div>
+
+  <div class="stats hidden" id="summaryGrid">
+    <div class="stat"><span class="stat-n" id="sTotal">0</span><span class="stat-l">Added</span></div>
+    <div class="stat"><span class="stat-n" id="sSkipped">0</span><span class="stat-l">Skipped</span></div>
+    <div class="stat"><span class="stat-n" id="sSheets">0</span><span class="stat-l">Sheets</span></div>
+    <div class="stat"><span class="stat-n" id="sErrors">0</span><span class="stat-l">Warnings</span></div>
+  </div>
+
+  <button class="dl-btn" id="downloadBtn" onclick="downloadResult()">Download updated database</button>
+</div>
+
+<script>
+// ── STATE ──
+let masterWb = null, masterRaw = null, plotData = null, fieldData = null;
+let dupMode = 'skip', outputBlob = null, logCount = 0;
+let stats = { added:0, skipped:0, sheets:0, errors:0 };
+
+// ── LOGGING ──
+function log(msg, type='info') {
+  const body = document.getElementById('logBody');
+  const t = new Date().toTimeString().slice(0,8);
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-t">${t}</span><span class="log-m ${type}">${msg}</span>`;
+  body.appendChild(line);
+  body.scrollTop = body.scrollHeight;
+  document.getElementById('logCount').textContent = (++logCount) + ' events';
+}
+function clearLog() {
+  document.getElementById('logBody').innerHTML = '';
+  logCount = 0;
+  document.getElementById('logCount').textContent = '—';
+}
+
+// ── OPTIONS ──
+function setDupMode(mode) {
+  dupMode = mode;
+  ['skip','overwrite','append'].forEach(m =>
+    document.getElementById('opt-'+m).classList.toggle('active', m===mode));
+}
+
+// ── FILE LOADING ──
+function setupDrop(zoneId, inputId, handler) {
+  const zone = document.getElementById(zoneId);
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); if(e.dataTransfer.files[0]) handler(e.dataTransfer.files[0]); });
+  document.getElementById(inputId).addEventListener('change', e => { if(e.target.files[0]) handler(e.target.files[0]); });
+}
+function readXlsx(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = e => { try { resolve(XLSX.read(e.target.result, {type:'array', cellDates:true})); } catch(err) { reject(err); } };
+    r.onerror = reject;
+    r.readAsArrayBuffer(file);
+  });
+}
+setupDrop('masterDropZone','masterFile', async file => {
+  try { masterRaw=file; masterWb=await readXlsx(file); setSub('masterSub','✓ '+file.name,'ok'); document.getElementById('masterDropZone').classList.add('loaded'); log(`Master DB loaded: ${file.name}`, 'success'); checkReady(); }
+  catch(e) { log('Failed: '+e.message,'error'); }
+});
+setupDrop('plotDropZone','plotFile', async file => {
+  try { plotData=await readXlsx(file); setSub('plotSub','✓ '+file.name,'ok'); document.getElementById('plotDropZone').classList.add('loaded'); log(`Plot Data loaded: ${file.name}`,'success'); checkReady(); }
+  catch(e) { setSub('plotSub','Error: '+e.message,'err'); log('Failed: '+e.message,'error'); }
+});
+setupDrop('fieldDropZone','fieldFile', async file => {
+  try { fieldData=await readXlsx(file); setSub('fieldSub','✓ '+file.name,'ok'); document.getElementById('fieldDropZone').classList.add('loaded'); log(`Field Survey loaded: ${file.name}`,'success'); checkReady(); }
+  catch(e) { setSub('fieldSub','Error: '+e.message,'err'); log('Failed: '+e.message,'error'); }
+});
+function setSub(id,msg,cls) { const el=document.getElementById(id); el.textContent=msg; el.className='drop-sub'+(cls?' '+cls:''); }
+function checkReady() { document.getElementById('runBtn').disabled = !(masterWb && (plotData||fieldData)); }
+
+// ── UTILITIES ──
+function getMasterRows(wb, sheetName) {
+  const ws = wb.Sheets[sheetName];
+  if(!ws) return [];
+  return XLSX.utils.sheet_to_json(ws, {defval:null, raw:false});
+}
+function fmtDate(val) {
+  if(!val) return null;
+  if(val instanceof Date) return val.toISOString().slice(0,10);
+  if(typeof val==='string' && val.match(/^\d{4}-\d{2}-\d{2}T/)) return val.slice(0,10);
+  return val;
+}
+function fmtDateTime(val) {
+  if(!val) return null;
+  if(val instanceof Date) return val.toISOString().replace('T',' ').slice(0,16);
+  return val;
+}
+function sanitize(val) {
+  if(val==null) return null;
+  if(typeof val==='string') return val.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,'').trim()||null;
+  return val;
+}
+function sanitizeRow(row) { const c={}; for(const k of Object.keys(row)) c[k]=sanitize(row[k]); return c; }
+
+function applyMerge(wb, sheetName, existing, incoming, keyFn, label) {
+  const ws = wb.Sheets[sheetName];
+  if(!ws) { log(`  ⚠ Sheet [${sheetName}] not found in master`,'warn'); stats.errors++; return; }
+  const cleanIncoming = incoming.map(sanitizeRow);
+  const existingKeys = new Set(existing.map(r=>keyFn(r)).filter(Boolean));
+  let added=0, skipped=0;
+  const rowsToAppend = [];
+  for(const row of cleanIncoming) {
+    const key = keyFn(row);
+    if(dupMode==='append') { rowsToAppend.push(row); added++; }
+    else if(key && existingKeys.has(key)) {
+      if(dupMode==='overwrite') {
+        const idx = existing.findIndex(r=>keyFn(r)===key);
+        if(idx!==-1) { const sr=idx+2; Object.keys(row).forEach((col,ci) => { const a=XLSX.utils.encode_cell({r:sr-1,c:ci}); if(!ws[a])ws[a]={}; ws[a].v=row[col]; ws[a].t=row[col]==null?'z':(typeof row[col]==='number'?'n':'s'); }); }
+        added++;
+      } else { skipped++; }
+    } else { rowsToAppend.push(row); if(key) existingKeys.add(key); added++; }
+  }
+  if(rowsToAppend.length>0 && ws) {
+    XLSX.utils.sheet_add_json(ws, rowsToAppend, {origin:-1, skipHeader:true});
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:range.e.r,c:range.e.c}});
+  }
+  stats.added+=added; stats.skipped+=skipped; stats.sheets++;
+  log(`  ✓ ${label}: +${added} rows${skipped?` (${skipped} skipped)`:''}`, added>0?'success':'warn');
+}
+
+// ══════════════════════════════════════════════════════════════
+// PLOT DATA MAPPINGS
+// Survey123 export: 1_0 (main), cwd_repeats_1 [1], species_cover_2 [2]
+// ══════════════════════════════════════════════════════════════
+
+// 01_PLOT_DATA — plot info + ground coverage combined
+function map01_PlotData(rows) {
+  return rows.map(r => ({
+    PLOT_ID:                  null,
+    GLOBAL_ID:                r['Preserved Global ID'] || r['GlobalID'],
+    PROJECT:                  r['General Project Information'],
+    COLLECTION_DATE:          fmtDate(r['Date']),
+    COLLECTORS:               r['Collectors'],
+    OTHER_COLLECTORS:         r['Others:'],
+    SITE_NAME:                r['Location Site name'],
+    SITE_CODE:                r['Location Site Code'],
+    SITE_NUMBER:              r['Location Site Number'],
+    SITE_ADDRESS:             r['Location Site address'],
+    PLOT_ASPECT_DEG:          r['Plot Aspect'],
+    PLOT_SLOPE_DEG:           r['Plot Slope (degrees)'],
+    PLOT_SIZE_M2:             r['Plot size (m2)'],
+    PLOT_ELEVATION_M:         r['Plot Elevation (m)'],
+    NOTES:                    r['Notes'],
+    GROUND_BASAL_VEG_PCT:     r['Basal vegetation'],
+    GROUND_NON_VASCULAR_PCT:  r['Non-vascular vegetation'],
+    GROUND_LITTER_PCT:        r['Litter'],
+    GROUND_FINE_WOODY_PCT:    r['Fine woody fuels'],
+    GROUND_COARSE_WOODY_PCT:  r['Coarse woody debris'],
+    GROUND_BARE_PCT:          r['Bare ground'],
+    GROUND_ROCK_PCT:          r['Rock'],
+    GROUND_BOULDERS_PCT:      r['Boulders'],
+    GROUND_COVER_TOTAL:       r['ground_cover_total_check'],
+    PLOT_VEG_COVER_GT135_PCT: r['Plot Vegetation Cover >1.35m'],
+    AVG_TOP_HEIGHT_M:         r['Average top height (m)'],
+    PERC_COVER_NOTES:         r['Percentage cover notes:'],
+    CREATION_DATE:            fmtDate(r['CreationDate']),
+    CREATOR:                  r['Creator'],
+    EDIT_DATE:                fmtDate(r['EditDate']),
+    EDITOR:                   r['Editor'],
+    FILE_SOURCE:              'LFMC_Plot_Data'
+  }));
+}
+
+// 10_GROUND_TRANSECT — unpack wide FLS columns → one row per transect/class
+const TIER_MAP = [
+  {key:'',      sfx:''},   // index 0: no suffix
+  ...Array.from({length:27}, (_,i) => ({key:'.'+(i+1), sfx:'.'+(i+1)}))
+];
+function parse10_GroundTransect(mainRows) {
+  const result = [];
+  for(const row of mainRows) {
+    const plotId = row['Location Plot Number'];
+    const date   = fmtDate(row['Date']);
+    for(let i=0; i<=27; i++) {
+      const sfx = i===0 ? '' : '.'+i;
+      const transect = row['Transect'+sfx];
+      const cls      = row['Class'+sfx];
+      const count    = row['Count Depth(mm)'+sfx];
+      const dist     = row['Distance (cm)'+sfx];
+      if(transect!=null && cls!=null) {
+        result.push({
+          GT_ID:          null,
+          PLOT_ID:        plotId,
+          COLLECTION_DATE: date,
+          TRANSECT:       transect,
+          CLASS:          cls,
+          COUNT_DEPTH_MM: count,
+          DISTANCE_CM:    dist,
+          NOTES:          null
+        });
+      }
+    }
+  }
+  return result;
+}
+
+// 20_VEGETATION_TIER — unpack tier coverage → one row per tier per plot
+const TIERS = [
+  {num:1, label:'T1', range:'>25m',      liveCol:'PercCover Tier1 L (>25m)',   deadCol:'PercCover Tier1 D (>25m)'},
+  {num:2, label:'T2', range:'12-25m',    liveCol:'PercCover Tier2 L (12-25m)', deadCol:'PercCover Tier2 D (12-25m)'},
+  {num:3, label:'T3', range:'5-12m',     liveCol:'PercCover Tier3 L (5-12m)',  deadCol:'PercCover Tier3 D (5-12m)'},
+  {num:4, label:'T4', range:'2-5m',      liveCol:'PercCover Tier4 L (2-5m)',   deadCol:'PercCover Tier4 D (2-5m)'},
+  {num:5, label:'T5', range:'0.3-2m',    liveCol:'PercCover Tier5 L (0.3-2m)', deadCol:'PercCover Tier5 D (0.3-2m)'},
+  {num:6, label:'T6', range:'<0.3m',     liveCol:'PercCover Tier6 L (<0.3m)',  deadCol:'PercCover Tier6 D (<0.3m)'},
+  {num:7, label:'T7', range:'Epiphytes', liveCol:'PercCover Tier7 (Epiphytes)',deadCol:null}
+];
+function parse20_VegetationTier(mainRows) {
+  const result = [];
+  for(const row of mainRows) {
+    const plotId = row['Location Plot Number'];
+    const date   = fmtDate(row['Date']);
+    for(const tier of TIERS) {
+      result.push({
+        VT_ID:            null,
+        PLOT_ID:          plotId,
+        COLLECTION_DATE:  date,
+        TIER:             tier.label,
+        TIER_HEIGHT_RANGE: tier.range,
+        COVER_LIVE_PCT:   row[tier.liveCol] ?? null,
+        COVER_DEAD_PCT:   tier.deadCol ? (row[tier.deadCol] ?? null) : null,
+        NOTES:            null
+      });
+    }
+  }
+  return result;
+}
+
+// 30_CWD — from cwd_repeats_1
+function map30_CWD(rows) {
+  return rows.map(r => ({
+    CWD_ID:           null,
+    PLOT_ID:          r['Plot Number'],
+    GLOBAL_ID:        r['GlobalID'],
+    COLLECTION_DATE:  null,
+    TRANSECT:         r['Transect:'],
+    DECAY_CLASS:      r['Decay class:'],
+    DIAMETER_CM:      r['Diameter (cm):'],
+    LENGTH_CM:        r['Length (cm):'],
+    NOTES:            null,
+    PARENT_GLOBAL_ID: r['ParentGlobalID'],
+    CREATION_DATE:    fmtDate(r['CreationDate']),
+    CREATOR:          r['Creator'],
+    EDIT_DATE:        fmtDate(r['EditDate']),
+    EDITOR:           r['Editor']
+  }));
+}
+
+// 40_SPECIES_COVER — from species_cover_2
+function map40_SpeciesCover(rows) {
+  return rows.map(r => ({
+    SC_ID:            null,
+    PLOT_ID:          r['Plot Number'],
+    GLOBAL_ID:        r['GlobalID'],
+    COLLECTION_DATE:  null,
+    SPECIES_CODE:     r['Species'],
+    OTHER_SPECIES:    r['Other species:'],
+    T1_LIVE_PCT:      r['Tier1 Cover Live'],
+    T1_DEAD_PCT:      r['Tier1 Cover Dead'],
+    T2_LIVE_PCT:      r['Tier2 Cover Live'],
+    T2_DEAD_PCT:      r['Tier2 Cover Dead'],
+    T3_LIVE_PCT:      r['Tier3 Cover Live'],
+    T3_DEAD_PCT:      r['Tier3 Cover Dead'],
+    T4_LIVE_PCT:      r['Tier4 Cover Live'],
+    T4_DEAD_PCT:      r['Tier4 Cover Dead'],
+    T5_LIVE_PCT:      r['Tier5 Cover Live'],
+    T5_DEAD_PCT:      r['Tier5 Cover Dead'],
+    T6_LIVE_PCT:      r['Tier6 Cover Live'],
+    T6_DEAD_PCT:      r['Tier6 Cover Dead'],
+    NOTES:            null,
+    PARENT_GLOBAL_ID: r['ParentGlobalID'],
+    CREATION_DATE:    fmtDate(r['CreationDate']),
+    CREATOR:          r['Creator'],
+    EDIT_DATE:        fmtDate(r['EditDate']),
+    EDITOR:           r['Editor']
+  }));
+}
+
+// ══════════════════════════════════════════════════════════════
+// FIELD SURVEY MAPPINGS
+// Survey123 export: 1_0 [0], species_sample_attributes_1 [1], fuel_moisture_samples_2 [2]
+// ══════════════════════════════════════════════════════════════
+
+// 50_FIELD_SURVEY — from 1_0 (now includes weather + location)
+function map50_FieldSurvey(rows) {
+  return rows.map(r => ({
+    FS_ID:                      null,
+    PLOT_ID:                    r['Location Plot Number'],
+    GLOBAL_ID:                  r['GlobalID'],
+    PLOT_ESTABLISHMENT_DATE:    fmtDate(r['Plot establishment date']),
+    SURVEY_DATE:                fmtDate(r['Date:']),
+    COLLECTORS:                 r['Collectors'],
+    OTHER_COLLECTORS:           r['Other collectors:'],
+    FUEL_TYPE:                  r['Fuel Type'],
+    FBP_MODEL:                  r['FBP Model'],
+    PLOT_COVER_CANOPY_PCT:      r['Plot Cover Canopy'],
+    CANOPY_DEAD_PCT:            r['% Canopy Dead'],
+    PLOT_COVER_ELEVATED_PCT:    r['Plot Cover Elevated'],
+    ELEVATED_DEAD_PCT:          r['% Elevated Dead'],
+    PLOT_COVER_NEAR_SURFACE_PCT: r['Plot Cover Near-Surface'],
+    NEAR_SURFACE_DEAD_PCT:      r['% Near-Surface Dead'],
+    SURFACE_LIVE_PCT:           r['% Surface Live'],
+    SURFACE_DEAD_PCT:           r['% Surface Dead'],
+    NOTES_LAYER:                r['Notes'],
+    WIND_MIN_KMH:               r['Wind speed min'],
+    WIND_MAX_KMH:               r['Wind speed max'],
+    WIND_AVG_KMH:               r['Wind speed ave'],
+    TEMP_MIN_C:                 r['Temperature min'],
+    TEMP_MAX_C:                 r['Temperature max'],
+    TEMP_AVG_C:                 r['Temperature ave'],
+    RH_MIN_PCT:                 r['Relative Humidity min'],
+    RH_MAX_PCT:                 r['Relative Humidity max'],
+    RH_AVG_PCT:                 r['Relative Humidity ave'],
+    CLOUD_PCT_START:            r['Cloud cover percentage at start'],
+    CLOUD_PCT_END:              r['Cloud cover percentage at the end'],
+    MISTY_FOGGY_AM:             r['Was it a misty/foggy morning?'],
+    GROUND_SURFACE_WET:         r['Is there evidence of wayer on the ground surface?'],
+    VEGETATION_WET:             r['Is the vegetation noticeably wet?'],
+    LAST_RAIN_NOTE:             r['When was the last rain on site? - approximate is okay'],
+    NOTES:                      r['Notes:'],
+    LATITUDE:                   r['y'],
+    LONGITUDE:                  r['x'],
+    CREATION_DATE:              fmtDate(r['CreationDate']),
+    CREATOR:                    r['Creator'],
+    EDIT_DATE:                  fmtDate(r['EditDate']),
+    EDITOR:                     r['Editor']
+  }));
+}
+
+// 60_SPECIES_SAMPLE — from species_sample_attributes_1
+function map60_SpeciesSample(rows) {
+  return rows.map(r => ({
+    SS_ID:                null,
+    PLOT_ID:              r['Plot Number:'],
+    GLOBAL_ID:            r['GlobalID'],
+    COLLECTION_DATE:      null,
+    LIVE_DEAD:            r['Live or Dead?'],
+    SPECIES_NAME:         r['Species Name'],
+    OTHER_SPECIES:        r['Other species name/type:'],
+    PCT_LIVE_GREEN:       r['Species Percent Live (Green)'],
+    PCT_LIVE_UNHEALTHY:   r['Species Percent Live (Unhealthy yellow/brown)'],
+    PHEN_VEGETATIVE_PCT:  r['Phenology Percent Vegetative'],
+    PHEN_FLOWERING_PCT:   r['Phenology Percent Flowering'],
+    PHEN_FRUITING_PCT:    r['Phenology Percent Fruiting'],
+    DEAD_FUEL_CLASS:      r['Dead Fuel Class'],
+    DEAD_FUEL_COVER_PCT:  r['Dead Fuel Cover %'],
+    PLANT_FORM:           r['Plant Form'],
+    FUEL_LAYER:           r['Fuel Layer'],
+    SAMPLING_HEIGHT_M:    r['Sampling Height (m)'],
+    AVG_HEIGHT_M:         r['Average Height (m)'],
+    NOTES:                r['Notes'],
+    PARENT_GLOBAL_ID:     r['ParentGlobalID'],
+    CREATION_DATE:        fmtDate(r['CreationDate']),
+    CREATOR:              r['Creator'],
+    EDIT_DATE:            fmtDate(r['EditDate']),
+    EDITOR:               r['Editor']
+  }));
+}
+
+// 70_FMC_SAMPLES — from fuel_moisture_samples_2
+// Computed fields:
+//   FRESH_SAMPLE_NET_G = Fresh Weight (g) - Container Tare (g)
+//   DRY_SAMPLE_NET_G   = Dry Weight (g) - Container Tare (g)
+//   FMC_PCT            = (FRESH_SAMPLE_NET_G - DRY_SAMPLE_NET_G) / DRY_SAMPLE_NET_G * 100
+function map70_FmcSamples(rows) {
+  return rows.map(r => {
+    const tare     = r['Container Tare (g)']  != null ? parseFloat(r['Container Tare (g)'])  : null;
+    const freshTot = r['Fresh Weight (g)']    != null ? parseFloat(r['Fresh Weight (g)'])    : null;
+    const dryTot   = r['Dry Weight (g)']      != null ? parseFloat(r['Dry Weight (g)'])      : null;
+    const freshNet = (freshTot!=null && tare!=null) ? +(freshTot - tare).toFixed(4) : null;
+    const dryNet   = (dryTot!=null  && tare!=null) ? +(dryTot   - tare).toFixed(4) : null;
+    const fmcPct   = (freshNet!=null && dryNet!=null && dryNet>0)
+                     ? +((freshNet - dryNet) / dryNet * 100).toFixed(2) : null;
+    return {
+      FMC_ID:             null,
+      PLOT_ID:            r['Plot Number:'],
+      GLOBAL_ID:          r['GlobalID'],
+      SAMPLE_NAME:        r['Sample Name'],
+      SPECIES_NAME:       r['Species Name'],
+      CONTAINER_NUMBER:   r['Container Number'],
+      COLLECTION_DATE:    fmtDate(r['Collection Date (YYYYMMDD)']),
+      COLLECTION_TIME:    r['Collection Time (HHmm)'] || null,
+      CONTACT_LAB:        r['Contact Lab'],
+      CONTAINER_TARE_G:   tare,
+      FRESH_WT_TOTAL_G:   freshTot,
+      FRESH_SAMPLE_NET_G: freshNet,
+      FRESH_WEIGH_DATE:   fmtDate(r['Fresh Weigh Date']),
+      OVEN_TEMP_C:        r['Oven Temperature (celsius)'],
+      OVEN_DATE_TIME_IN:  fmtDateTime(r['Oven Date and Time In']),
+      OVEN_DATE_TIME_OUT: fmtDateTime(r['Oven Date and Time Out']),
+      DRYING_HOURS:       r['drying_hours'],
+      DRYING_TIME_NOTE:   r['drying_time_note'],
+      DRY_WT_TOTAL_G:     dryTot,
+      DRY_SAMPLE_NET_G:   dryNet,
+      FMC_PCT:            fmcPct,
+      CHECK_WEIGHT:       r['Check Weight'],
+      NOTES:              r['Notes'],
+      PARENT_GLOBAL_ID:   r['ParentGlobalID'],
+      CREATION_DATE:      fmtDate(r['CreationDate']),
+      CREATOR:            r['Creator'],
+      EDIT_DATE:          fmtDate(r['EditDate']),
+      EDITOR:             r['Editor']
+    };
+  });
+}
+
+// ── MAIN ──
+async function runUpdate() {
+  clearLog();
+  stats = {added:0, skipped:0, sheets:0, errors:0};
+  outputBlob = null;
+  document.getElementById('logDot').classList.add('live');
+  document.getElementById('summaryGrid').classList.add('hidden');
+  document.getElementById('downloadBtn').style.display = 'none';
+  document.getElementById('runBtn').disabled = true;
+
+  log('Starting update…','section');
+  log(`Duplicate mode: ${dupMode}`,'info');
+
+  const buf = await masterRaw.arrayBuffer();
+  const wb  = XLSX.read(buf, {type:'array', cellDates:true, cellStyles:true});
+
+  // ── LFMC_Plot_Data → 01, 10, 20, 30, 40 ──
+  if(plotData) {
+    log('── LFMC_Plot_Data ──','section');
+    const mainSheet = plotData.SheetNames[0];
+    const mainRows  = XLSX.utils.sheet_to_json(plotData.Sheets[mainSheet], {defval:null, raw:false});
+    log(`[${mainSheet}] ${mainRows.length} records`,'info');
+
+    log('→ 01_PLOT_DATA','info');
+    applyMerge(wb,'01_PLOT_DATA', getMasterRows(wb,'01_PLOT_DATA'),
+      map01_PlotData(mainRows),
+      r => r.GLOBAL_ID || r.SITE_NUMBER || null, '01_PLOT_DATA');
+
+    log('→ 10_GROUND_TRANSECT','info');
+    const gtRows = parse10_GroundTransect(mainRows);
+    log(`  Unpacked: ${gtRows.length} transect rows`,'info');
+    applyMerge(wb,'10_GROUND_TRANSECT', getMasterRows(wb,'10_GROUND_TRANSECT'),
+      gtRows,
+      r => r.PLOT_ID&&r.TRANSECT&&r.CLASS!=null ? `${r.PLOT_ID}|${r.COLLECTION_DATE}|${r.TRANSECT}|${r.CLASS}` : null,
+      '10_GROUND_TRANSECT');
+
+    log('→ 20_VEGETATION_TIER','info');
+    const vtRows = parse20_VegetationTier(mainRows);
+    log(`  Unpacked: ${vtRows.length} tier rows`,'info');
+    applyMerge(wb,'20_VEGETATION_TIER', getMasterRows(wb,'20_VEGETATION_TIER'),
+      vtRows,
+      r => r.PLOT_ID&&r.TIER ? `${r.PLOT_ID}|${r.COLLECTION_DATE}|${r.TIER}` : null,
+      '20_VEGETATION_TIER');
+
+    log('→ 30_CWD','info');
+    const cwdSheet = plotData.SheetNames[1] || plotData.SheetNames.find(n=>n.toLowerCase().includes('cwd'));
+    if(cwdSheet) {
+      const cwdRows = XLSX.utils.sheet_to_json(plotData.Sheets[cwdSheet], {defval:null, raw:false});
+      log(`  [${cwdSheet}] ${cwdRows.length} rows`,'info');
+      applyMerge(wb,'30_CWD', getMasterRows(wb,'30_CWD'),
+        map30_CWD(cwdRows),
+        r => r.GLOBAL_ID || (r.PLOT_ID&&r.TRANSECT ? `${r.PLOT_ID}|${r.TRANSECT}|${r.DECAY_CLASS}` : null),
+        '30_CWD');
+    } else { log('  ⚠ No cwd_repeats sheet found','warn'); stats.errors++; }
+
+    log('→ 40_SPECIES_COVER','info');
+    const scSheet = plotData.SheetNames[2] || plotData.SheetNames.find(n=>n.toLowerCase().includes('species'));
+    if(scSheet) {
+      const scRows = XLSX.utils.sheet_to_json(plotData.Sheets[scSheet], {defval:null, raw:false});
+      log(`  [${scSheet}] ${scRows.length} rows`,'info');
+      applyMerge(wb,'40_SPECIES_COVER', getMasterRows(wb,'40_SPECIES_COVER'),
+        map40_SpeciesCover(scRows),
+        r => r.GLOBAL_ID || (r.PLOT_ID&&r.SPECIES_CODE ? `${r.PLOT_ID}|${r.SPECIES_CODE}` : null),
+        '40_SPECIES_COVER');
+    } else { log('  ⚠ No species_cover sheet found','warn'); stats.errors++; }
+  }
+
+  // ── LFMC_Field_Survey → 50, 60, 70 ──
+  if(fieldData) {
+    log('── LFMC_Field_Survey ──','section');
+    log(`Sheets: [${fieldData.SheetNames.join(', ')}]`,'info');
+
+    log('→ 50_FIELD_SURVEY','info');
+    const sheet50 = fieldData.SheetNames[0];
+    const rows50  = XLSX.utils.sheet_to_json(fieldData.Sheets[sheet50], {defval:null, raw:false});
+    log(`  [${sheet50}] ${rows50.length} records`,'info');
+    applyMerge(wb,'50_FIELD_SURVEY', getMasterRows(wb,'50_FIELD_SURVEY'),
+      map50_FieldSurvey(rows50),
+      r => r.GLOBAL_ID || r.PLOT_ID || null, '50_FIELD_SURVEY');
+
+    log('→ 60_SPECIES_SAMPLE','info');
+    const sheet60 = fieldData.SheetNames[1] || fieldData.SheetNames.find(n=>n.toLowerCase().includes('species'));
+    if(sheet60) {
+      const rows60 = XLSX.utils.sheet_to_json(fieldData.Sheets[sheet60], {defval:null, raw:false});
+      log(`  [${sheet60}] ${rows60.length} rows`,'info');
+      applyMerge(wb,'60_SPECIES_SAMPLE', getMasterRows(wb,'60_SPECIES_SAMPLE'),
+        map60_SpeciesSample(rows60),
+        r => r.GLOBAL_ID || (r.PLOT_ID&&r.SPECIES_NAME ? `${r.PLOT_ID}|${r.SPECIES_NAME}|${r.LIVE_DEAD}` : null),
+        '60_SPECIES_SAMPLE');
+    } else { log('  ⚠ No species_sample_attributes sheet found','warn'); stats.errors++; }
+
+    log('→ 70_FMC_SAMPLES','info');
+    const sheet70 = fieldData.SheetNames[2] || fieldData.SheetNames.find(n=>n.toLowerCase().includes('fuel_moisture'));
+    if(sheet70) {
+      const rows70 = XLSX.utils.sheet_to_json(fieldData.Sheets[sheet70], {defval:null, raw:false});
+      log(`  [${sheet70}] ${rows70.length} rows`,'info');
+      applyMerge(wb,'70_FMC_SAMPLES', getMasterRows(wb,'70_FMC_SAMPLES'),
+        map70_FmcSamples(rows70),
+        r => r.GLOBAL_ID || (r.PLOT_ID&&r.SAMPLE_NAME ? `${r.PLOT_ID}|${r.SAMPLE_NAME}` : null),
+        '70_FMC_SAMPLES');
+    } else { log('  ⚠ No fuel_moisture_samples sheet found','warn'); stats.errors++; }
+  }
+
+  log('── Writing output ──','section');
+  try {
+    const outBuf = XLSX.write(wb, {type:'array', bookType:'xlsx', cellDates:true, cellStyles:true});
+    outputBlob = new Blob([outBuf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    log('Output ready','success');
+  } catch(e) { log('Error: '+e.message,'error'); stats.errors++; }
+
+  document.getElementById('sTotal').textContent   = stats.added;
+  document.getElementById('sSkipped').textContent = stats.skipped;
+  document.getElementById('sSheets').textContent  = stats.sheets;
+  document.getElementById('sErrors').textContent  = stats.errors;
+  document.getElementById('summaryGrid').classList.remove('hidden');
+  if(outputBlob) document.getElementById('downloadBtn').style.display = 'block';
+  document.getElementById('logDot').classList.remove('live');
+  document.getElementById('runBtn').disabled = false;
+  log(`Done — ${stats.added} rows added across ${stats.sheets} sheets.`, 'success');
+  if(stats.errors>0) log(`${stats.errors} warning(s) — check log above.`,'warn');
+}
+
+// ── DOWNLOAD ──
+function downloadResult() {
+  if(!outputBlob) return;
+  const stamp = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(outputBlob);
+  a.download = `LFMC_MasterDatabase_Updated_${stamp}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+</script>
+</body>
+</html>
